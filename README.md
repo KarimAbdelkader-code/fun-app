@@ -25,8 +25,8 @@ The FunApp API allows user registration and profile management. It provides endp
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/funapp-api.git
-   cd funapp-api
+   git clone https://github.com/kimo12345678/fun-app.git
+   cd fun-app
    ```
 
 2. Install dependencies:
