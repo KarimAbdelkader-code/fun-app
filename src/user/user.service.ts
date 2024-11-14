@@ -58,7 +58,7 @@ export class UserService {
 
     // Check if the location is within Egypt (latitude between 22 and 32)
     if (
-      (latitude < 22.0 || latitude > 34.0) &&
+      (latitude < 22.0 || latitude > 34.0) ||
       (longitude < 24.0 || longitude > 37.0)
     ) {
       throw new BadRequestException(
@@ -108,7 +108,7 @@ export class UserService {
       });
 
       const results = response.data.results;
-      if (results.length > 0) {
+      if (results && results.length > 0) {
         const city =
           results[0].components.city ||
           results[0].components.town ||
@@ -119,6 +119,15 @@ export class UserService {
       throw new Error('City not found for the given coordinates');
     } catch (error) {
       console.error('Error fetching city:', error);
+
+      // If the error is from axios, provide a more detailed message
+      if (axios.isAxiosError(error)) {
+        throw new BadRequestException(
+          `Error fetching city from coordinates. Axios error: ${error.message}`,
+        );
+      }
+
+      // Otherwise, throw the default exception
       throw new BadRequestException(
         'Could not determine the city based on the provided coordinates.',
       );
