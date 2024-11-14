@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './user.entity';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import axios from 'axios';
 
@@ -33,6 +33,13 @@ describe('UserService', () => {
               }; // Mock the save method to add an `id`, `created_at`, and `updated_at`
             }),
             findOne: jest.fn(),
+            createQueryBuilder: jest.fn().mockImplementation(() => {
+              const qb = {
+                where: jest.fn().mockReturnThis(),
+                getOne: jest.fn(),
+              } as unknown as SelectQueryBuilder<User>;
+              return qb;
+            }),
           },
         },
       ],
@@ -59,12 +66,11 @@ describe('UserService', () => {
         city: 'Cairo', // Hardcoded city value
       };
 
-      const now = new Date();
       const savedUser = {
-        id: 1, // The `id` is added by `save`
+        id: 1,
         ...userWithoutId,
-        created_at: now,
-        updated_at: now,
+        created_at: new Date(),
+        updated_at: new Date(),
       };
 
       // Mock axios to return a valid city response
@@ -73,7 +79,7 @@ describe('UserService', () => {
           results: [
             {
               components: {
-                city: 'Cairo', // Hardcoded city value for the test
+                city: 'Cairo',
               },
             },
           ],
@@ -99,12 +105,11 @@ describe('UserService', () => {
       // Assertions for other properties
       // Assertions for other properties, excluding created_at and updated_at
       const { created_at, updated_at, ...savedUserWithoutDates } = savedUser;
-      expect(result).toEqual(expect.objectContaining(savedUserWithoutDates)); // Now ignoring created_at and updated_at
+      expect(result).toEqual(expect.objectContaining(savedUserWithoutDates));
 
-      // Ensure that the create method was called with the correct parameters (without id)
       expect(userRepository.create).toHaveBeenCalledWith({
         ...createUserDto,
-        city: 'Cairo', // Ensure city is hardcoded correctly
+        city: 'Cairo',
       });
     });
 
@@ -148,20 +153,54 @@ describe('UserService', () => {
         updated_at: new Date(),
       };
 
-      // Mocking the findOne method
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+      jest
+        .spyOn(userRepository, 'createQueryBuilder')
+        .mockImplementation(() => {
+          const qb = {
+            where: jest.fn().mockReturnThis(),
+            getOne: jest.fn().mockResolvedValue(user),
+          } as unknown as SelectQueryBuilder<User>;
+          return qb;
+        });
 
       const result = await userService.getUserById(1);
 
-      // Ensure that the correct user is returned
       expect(result).toEqual(user);
+      expect(userRepository.createQueryBuilder).toHaveBeenCalledWith('user');
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      // Mocking the findOne method to return undefined
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(undefined);
+      jest
+        .spyOn(userRepository, 'createQueryBuilder')
+        .mockImplementation(() => {
+          const qb = {
+            where: jest.fn().mockReturnThis(),
+            getOne: jest.fn().mockResolvedValue(null), // No user found
+          } as unknown as SelectQueryBuilder<User>;
+          return qb;
+        });
 
       await expect(userService.getUserById(1)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('SQL Injection Prevention', () => {
+    it('should prevent SQL injection through ID parameter', async () => {
+      const maliciousId = '1 OR 1=1';
+
+      jest
+        .spyOn(userRepository, 'createQueryBuilder')
+        .mockImplementation(() => {
+          const qb = {
+            where: jest.fn().mockReturnThis(),
+            getOne: jest.fn().mockResolvedValue(undefined),
+          } as unknown as SelectQueryBuilder<User>;
+          return qb;
+        });
+
+      await expect(userService.getUserById(maliciousId as any)).rejects.toThrow(
         NotFoundException,
       );
     });
